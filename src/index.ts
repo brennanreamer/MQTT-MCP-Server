@@ -238,6 +238,34 @@ const tools: Tool[] = [
     },
   },
   {
+    name: "mqtt_publish",
+    description:
+      "Publish a message to an MQTT topic. Useful for sending test data or triggering actions on the broker.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description: "The MQTT topic to publish to (e.g., 'agents/test/status')",
+        },
+        message: {
+          type: "string",
+          description: "The message payload to publish",
+        },
+        qos: {
+          type: "number",
+          description: "Quality of Service level (0, 1, or 2). Default is 0.",
+          enum: [0, 1, 2],
+        },
+        retain: {
+          type: "boolean",
+          description: "Whether to set the retain flag on the message. Default is false.",
+        },
+      },
+      required: ["topic", "message"],
+    },
+  },
+  {
     name: "mqtt_list_subscriptions",
     description: "List all active MQTT topic subscriptions and their message counts.",
     inputSchema: {
@@ -368,6 +396,25 @@ async function handleReadMessages(
   return JSON.stringify(formattedMessages, null, 2);
 }
 
+async function handlePublish(
+  topic: string,
+  message: string,
+  qos: number = 0,
+  retain: boolean = false
+): Promise<string> {
+  const client = await ensureConnected();
+
+  return new Promise((resolve, reject) => {
+    client.publish(topic, message, { qos: qos as 0 | 1 | 2, retain }, (err) => {
+      if (err) {
+        reject(new Error(`Failed to publish to ${topic}: ${err.message}`));
+        return;
+      }
+      resolve(`Successfully published to topic '${topic}' (QoS ${qos}, retain: ${retain}): ${message}`);
+    });
+  });
+}
+
 async function handleListSubscriptions(): Promise<string> {
   await ensureConnected();
 
@@ -446,6 +493,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           args?.topic as string | undefined,
           limit,
           (args?.clear as boolean) ?? false
+        );
+        break;
+
+      case "mqtt_publish":
+        result = await handlePublish(
+          args?.topic as string,
+          args?.message as string,
+          (args?.qos as number) ?? 0,
+          (args?.retain as boolean) ?? false
         );
         break;
 
